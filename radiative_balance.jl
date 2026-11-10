@@ -104,7 +104,7 @@ The goal is to predict the evolution of the average surface temperature of the E
 
 ``T=T(t)`` is the Earth's average surface temperature as a function of time $t$ 
 
-Inititally $t=0$, $T(0)=T_0$
+Initially $t=0$, $T(0)=T_0$
 
 We write ``T'`` for ``dT/dt`` and look for an equation of the form:
 
@@ -117,10 +117,10 @@ where ``f(t)`` represents the external forcing which acts to change the Earth's 
 md"""
 ---
 
-#### Solving an ODEs of the form ``T'=f(T,p,t)`` in Julia
+#### Solving an ODE of the form ``T'=f(T,p,t)`` in Julia
 
 0. Define f(T,p,t)
-1. ODEProblem(  f, f(0), time_span, parameters)
+1. ODEProblem(f, T₀, time_span, parameters)
 2. solve
 3. plot etc
 """
@@ -135,7 +135,7 @@ md"""
 # ╔═╡ 739e914a-9760-4a84-a860-7acadddfc21f
 md"""
 
-The energy (heat) budget of a planet without atmsophere is given by the simple equation:
+The energy (heat) budget of a planet without atmosphere is given by the simple equation:
 
 $\begin{align}
 \text{\color{brown}{change in temperature}} = & + \text{\color{red}{heating from the Sun's rays}} \newline
@@ -199,7 +199,7 @@ let
 	lines!(ax, model1; color = :red, linewidth = 3)
 	hlines!(ax, temp₀ - 273.15; color = :gray, linestyle = :dash)
 	text!(ax, 700, 35 + temp₀ - 273.15; text = "Initial Temperature = $(temp₀) K", align = (:center, :center))
-	ylims!(ax, -273.15, 400)
+	ylims!(ax, -300, 400)
 	fig
 end
 
@@ -211,7 +211,7 @@ md"""
 \
 ``T' = (1 - \alpha)a ``$(html"<br>") Solution: ``T(t) = (1 -\alpha) a t + T_0``
 
-where $\alpha$ is called ablbedo and equal to 30\%.
+where $\alpha$ is called albedo and equal to 30\%.
 
 """
 
@@ -231,7 +231,7 @@ let
 	lines!(ax, model2; color = :red, linewidth = 3)
 	hlines!(ax, temp₀ - 273.15; color = :gray, linestyle = :dash)
 	text!(ax, 700, 35 + temp₀ - 273.15; text = "Initial Temperature = $(temp₀) K", align = (:center, :center))
-	ylims!(ax, -273.15, 400)
+	ylims!(ax, -300, 400)
 	fig
 end
 
@@ -267,7 +267,7 @@ let
 	lines!(ax, model3; color = :red, linewidth = 3)
 	hlines!(ax, temp₀ - 273.15; color = :gray, linestyle = :dash)
 	text!(ax, 700, 35 + temp₀ - 273.15; text = "Initial Temperature = $(temp₀) K", align = (:center, :center))
-	ylims!(ax, -273.15, 400)
+	ylims!(ax, -300, 400)
 	fig
 end
 
@@ -280,7 +280,7 @@ md"""
 ``T' = (1-\alpha) a - (1-\epsilon/2)b T^4 ``$(html"<br>")
 
 Comment:  At long times, the temperatures reaches a stable value: 
-``T(t) = \left(\frac{(1-\alpha)S }{(1-\epsilon/2)b}\right)^{1/4}``
+``T(t) = \left(\frac{(1-\alpha)a }{(1-\epsilon/2)b}\right)^{1/4}``
 
 """
 
@@ -305,7 +305,7 @@ let
 	ax = Axis(fig[1, 1]; xlabel = "years", ylabel = "Temperature °C",
 	          title = "Earth's temperature with an atmosphere")
 	lines!(ax, model4; color = :red, linewidth = 3)
-	hlines!(ax, (a * (1 - alpha) / b)^(1/4) - 273.15; color = :gray, linestyle = :dash)
+	hlines!(ax, T₀ - 273.15; color = :gray, linestyle = :dash)
 	text!(ax, 700, -7 + T₀ - 273.15; text = "Initial Temperature = $(T₀ - 273.15) C", align = (:center, :center))
 	ylims!(ax, -30, 35)
 	fig
@@ -322,11 +322,14 @@ md"""
 
 """
 
+# ╔═╡ 86a2382e-0276-4787-9169-1f85f2ca1ef7
+ε₀ = 0.745; # baseline emissivity
+
 # ╔═╡ 87a384f1-1679-4f1a-aaad-ac85c117b959
-T₁=((1-alpha)*a/((1-0.745/2)*b))^(1/4)
+T₁=((1-alpha)*a/((1-ε₀/2)*b))^(1/4)
 
 # ╔═╡ 7a6019d9-41af-4e5c-80e6-25dc52ac1819
-eps(CO₂,T) = 0.745+0.02 * log(CO₂/280)/log(2)+0.01*(T-T₁)
+emissivity(CO₂,T) = ε₀+0.02 * log(CO₂/280)/log(2)+0.01*(T-T₁)
 
 # ╔═╡ ce1792bc-36d2-49b2-bd92-351e09bb3a4f
 md"""
@@ -336,7 +339,7 @@ CO₂ = $(@bind CO₂ Slider(280:1:560, show_value=true, default=280) )
 """
 
 # ╔═╡ a61b1671-ad76-4a34-8d63-3f687fffe836
-m5 = ODEProblem( (temp, p, t)-> a * (1-alpha) - (1-eps(CO₂,T₁)/2)*b*temp^4, T₁,  (0, timespan) )
+m5 = ODEProblem( (temp, p, t)-> a * (1-alpha) - (1-emissivity(CO₂,T₁)/2)*b*temp^4, T₁,  (0, timespan) )
 
 # ╔═╡ 819431a7-cdcd-430a-a89a-2db90eb22e7c
 let
@@ -364,7 +367,7 @@ md"""
 """
 
 # ╔═╡ 0b6e8dd2-a060-4ed9-aa03-de48e3c7c3e1
-m6 = ODEProblem( (temp, p, t)-> a * (1-alpha) - (1-eps(CO₂,temp)/2)*b*temp^4, T₁,  (0, timespan) )
+m6 = ODEProblem( (temp, p, t)-> a * (1-alpha) - (1-emissivity(CO₂,temp)/2)*b*temp^4, T₁,  (0, timespan) )
 
 # ╔═╡ 5b153580-78ee-4a73-b936-507b3b39f02c
 let
@@ -372,7 +375,7 @@ let
 	model6.u .-= 273.15
 	fig = Figure()
 	ax = Axis(fig[1, 1]; xlabel = "years", ylabel = "Temperature °C",
-	          title = "Earth's temperature with an atmosphere")
+	          title = "Earth's temperature with water vapor feedback")
 	lines!(ax, model6; color = :red, linewidth = 3)
 	hlines!(ax, T₁ - 273.15; color = :gray, linestyle = :dash)
 	text!(ax, 700, -0.5 + T₁ - 273.15; text = "Initial Temperature = $(round(10 * (T₁ - 273.15)) / 10) C", align = (:center, :center))
@@ -3447,6 +3450,7 @@ uuid = "23338594-aafe-5451-b93e-139f81909106"
 # ╟─ae54e5a6-f4ab-4196-845e-612e7c7ebb5c
 # ╟─2d3740ae-bbeb-49a5-a51e-0b5079e68592
 # ╟─3c3f7997-ca76-4536-8331-634fff7fbcb7
+# ╠═86a2382e-0276-4787-9169-1f85f2ca1ef7
 # ╠═87a384f1-1679-4f1a-aaad-ac85c117b959
 # ╠═7a6019d9-41af-4e5c-80e6-25dc52ac1819
 # ╠═a61b1671-ad76-4a34-8d63-3f687fffe836
