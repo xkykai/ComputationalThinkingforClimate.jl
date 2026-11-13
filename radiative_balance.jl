@@ -59,13 +59,63 @@ overflow-x: hidden;
 }
 </style>"""
 
+# ╔═╡ 6f1c2a8e-3b4d-4e5f-9a0b-1c2d3e4f5a61
+begin
+	# Crisp vector output and one consistent style for every figure
+	CairoMakie.activate!(type = "svg")
+	set_theme!(Theme(
+		fontsize = 15,
+		size = (760, 360),
+		Axis = (
+			xgridcolor = (:black, 0.07), ygridcolor = (:black, 0.07),
+			topspinevisible = false, rightspinevisible = false,
+			xticksize = 4, yticksize = 4,
+			titlealign = :left, titlesize = 16, titlegap = 10,
+		),
+		Lines = (linewidth = 3,),
+		Legend = (framevisible = false, labelsize = 13, rowgap = 2, patchsize = (26, 10)),
+	))
+end
+
+# ╔═╡ 6f1c2a8e-3b4d-4e5f-9a0b-1c2d3e4f5a62
+begin
+	K₀ = 273.15   # 0 °C in kelvin
+
+	palette = (model = "#c8102e", nofeedback = "#1f6fb2", initial = "#8a8a8a",
+	           equilibrium = "#1b9e77", observed = "#e69f00")
+
+	celsius(T) = round(T - K₀; digits = 1)
+
+	"New figure with a temperature-vs-time axis."
+	function temperature_figure(title; ylims = nothing, size = (760, 360))
+		fig = Figure(; size)
+		ax = Axis(fig[1, 1]; title, xlabel = "time  [years]",
+		          ylabel = "surface temperature  [°C]")
+		isnothing(ylims) || ylims!(ax, ylims...)
+		return fig, ax
+	end
+
+	"Plot an ODE solution in kelvin as °C, sampled densely from its interpolant."
+	function temperature_line!(ax, sol; label = "model", color = palette.model,
+	                           linestyle = :solid)
+		ts = range(first(sol.t), last(sol.t); length = 500)
+		lines!(ax, ts, sol.(ts) .- K₀; label, color, linestyle)
+	end
+
+	"Horizontal reference line at temperature T (kelvin)."
+	reference_line!(ax, T; label, color, linestyle = :dash) =
+		hlines!(ax, T - K₀; label, color, linestyle, linewidth = 1.6)
+
+	"Legend to the right of the axis."
+	side_legend!(fig, ax) = Legend(fig[1, 2], ax; tellheight = false, valign = :center)
+end
+
 # ╔═╡ 14195fc4-40e1-4576-973a-69d649fddc02
 TableOfContents(title="📚 Table of Contents", indent=true, depth=4, aside=true)
 
 # ╔═╡ 92883ed9-5572-41fd-96c7-190279f90804
 md"""
-In this lecture we will build a simple climate model that predicts the averaged temperature of earth's atmosphere and how it changes in different climates. If you are interested to learn more, you may want to check the "Introduction to Climate Modeling" lecture by former student Henri Drake. [Henri's video](https://computationalthinking.mit.edu/Fall20/lecture20/),
-[Henri's original notebook](https://github.com/mitmath/18S191/blob/Fall20/lecture_notebooks/week11/01_energy_balance_model.jl) where he describes the Energy Balance Model.
+In this lecture we will build a simple energy balance model that predicts the averaged temperature of Earth's atmosphere and how it changes in different climates.
 """
 
 # ╔═╡ 2ab34e6f-9059-4f33-8abd-df15b0c00b6b
@@ -73,17 +123,9 @@ md"""
 ## Surface temperature and atmospheric $CO_2$
 """
 
-# ╔═╡ 8d2fd4f0-f2f6-4bc8-b753-f34f2abfcc7e
-html"""
-<iframe style="width: 100%; aspect-ratio: 16 / 9;" src="https://www.youtube-nocookie.com/embed/-JIuKjaY3r4" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
-"""
-
-# ╔═╡ 041caa91-5449-4de1-8786-56ae3db74bfe
-html"""
-<figure>
-<img src="https://upload.wikimedia.org/wikipedia/commons/a/ab/Co2-temperature-records.svg" width=625>
-<figcaption>Antarctic temperature anomaly and atmospheric CO₂ from the EPICA Dome C and Vostok ice cores over the past 800,000 years. <a href="https://commons.wikimedia.org/wiki/File:Co2-temperature-records.svg">Leland McInnes</a>, <a href="https://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a>.</figcaption>
-</figure>
+# ╔═╡ 6f1c2a8e-3b4d-4e5f-9a0b-1c2d3e4f5a67
+md"""
+*Antarctic temperature anomaly (relative to the last millennium, left axis) and atmospheric CO₂ (right axis) from ice cores over the past 800,000 years, averaged over 1,000-year intervals. The two axes are scaled by a linear fit of CO₂ against temperature, so the curves overlap where they covary. For comparison, CO₂ today is about 420 ppm, far above the top of this plot. Temperature: EPICA Dome C, [Jouzel et al. (2007)](https://doi.org/10.1126/science.1141038). CO₂: Antarctic composite, [Bereiter et al. (2015)](https://doi.org/10.1002/2014GL061957). Data from [NOAA NCEI Paleoclimatology](https://www.ncei.noaa.gov/products/paleoclimatology/ice-core).*
 """
 
 # ╔═╡ 21b71237-bfdf-47d1-beb3-eac924c52f6a
@@ -151,7 +193,7 @@ where each of these is interpreted as an average over the entire globe.
 # ╔═╡ 3a66b385-737e-49e4-b30d-56b055b7bf44
 html"""
 <figure>
-<img src="https://upload.wikimedia.org/wikipedia/commons/b/bb/The-NASA-Earth%27s-Energy-Budget-Poster-Radiant-Energy-System-satellite-infrared-radiation-fluxes.jpg" width=625>
+<img src="https://upload.wikimedia.org/wikipedia/commons/thumb/b/bb/The-NASA-Earth%27s-Energy-Budget-Poster-Radiant-Energy-System-satellite-infrared-radiation-fluxes.jpg/1280px-The-NASA-Earth%27s-Energy-Budget-Poster-Radiant-Energy-System-satellite-infrared-radiation-fluxes.jpg" style="width: 100%; max-width: 680px;" alt="Earth's energy budget">
 <figcaption>Earth's energy budget. <a href="https://commons.wikimedia.org/wiki/File:The-NASA-Earth%27s-Energy-Budget-Poster-Radiant-Energy-System-satellite-infrared-radiation-fluxes.jpg">NASA</a>, public domain.</figcaption>
 </figure>
 """
@@ -182,7 +224,7 @@ a = S_0/C;
 
 # ╔═╡ b38f98a0-fee8-4746-a136-247e78230f34
 begin
-	temp₀ = 0; #absolute zero [K]
+	temp₀ = 0.0;  # absolute zero [K]
 	timespan = 1000.;
 end
 
@@ -191,15 +233,12 @@ m1 = ODEProblem( (temp, p, t)-> a, temp₀,  (0, timespan) )
 
 # ╔═╡ 3785b312-4228-44e5-992b-90cd23f2bac2
 let
-	model1 = solve(m1)
-	model1.u .-= 273.15
-	fig = Figure()
-	ax = Axis(fig[1, 1]; xlabel = "years", ylabel = "Temperature °C",
-	          title = "Earth's heat budget absorbing solar radiation only")
-	lines!(ax, model1; color = :red, linewidth = 3)
-	hlines!(ax, temp₀ - 273.15; color = :gray, linestyle = :dash)
-	text!(ax, 700, 35 + temp₀ - 273.15; text = "Initial Temperature = $(temp₀) K", align = (:center, :center))
-	ylims!(ax, -300, 400)
+	fig, ax = temperature_figure("Absorbing solar radiation only"; ylims = (-300, 400))
+	temperature_line!(ax, solve(m1))
+	reference_line!(ax, temp₀; label = "initial: $(temp₀) K", color = palette.initial)
+	reference_line!(ax, K₀ + 15; label = "observed today ≈ 15 °C",
+	                color = palette.observed, linestyle = :dot)
+	side_legend!(fig, ax)
 	fig
 end
 
@@ -223,15 +262,12 @@ m2 = ODEProblem( (temp, p, t)-> a * (1-alpha), temp₀,  (0, timespan) )
 
 # ╔═╡ 54801ddc-c1a6-4e82-8264-08c2205d18ed
 let
-	model2 = solve(m2)
-	model2.u .-= 273.15
-	fig = Figure()
-	ax = Axis(fig[1, 1]; xlabel = "years", ylabel = "Temperature °C",
-	          title = "Earth's heat budget absorbing and reflecting solar radiation")
-	lines!(ax, model2; color = :red, linewidth = 3)
-	hlines!(ax, temp₀ - 273.15; color = :gray, linestyle = :dash)
-	text!(ax, 700, 35 + temp₀ - 273.15; text = "Initial Temperature = $(temp₀) K", align = (:center, :center))
-	ylims!(ax, -300, 400)
+	fig, ax = temperature_figure("Absorbing and reflecting solar radiation"; ylims = (-300, 400))
+	temperature_line!(ax, solve(m2))
+	reference_line!(ax, temp₀; label = "initial: $(temp₀) K", color = palette.initial)
+	reference_line!(ax, K₀ + 15; label = "observed today ≈ 15 °C",
+	                color = palette.observed, linestyle = :dot)
+	side_legend!(fig, ax)
 	fig
 end
 
@@ -243,13 +279,13 @@ md"""
 \
 ``T' = (1-\alpha) a - b T^4 ``$(html"<br>")
 
-Comment:  At long times, the temperatures reaches a stable value: 
-``T(t) = \left(\frac{(1-\alpha)a }{b}\right)^{1/4}``
+At long times the temperature reaches a stable value, where absorbed and emitted radiation balance:
+``T_{eq} = \left(\frac{(1-\alpha)a }{b}\right)^{1/4}``
 
 """
 
 # ╔═╡ 3ba79372-aa57-49a8-9d50-146ef8f7d0b3
-sigma = 5.670374419*10^(−8); # [W/m^2/K^4]
+sigma = 5.670374419e-8; # Stefan-Boltzmann constant [W/m^2/K^4]
 
 # ╔═╡ 17800b4d-a879-4270-b39d-c44901f46391
 b = sigma/C;
@@ -259,15 +295,15 @@ m3 = ODEProblem( (temp, p, t)-> a * (1-alpha) - b*temp^4, temp₀,  (0, timespan
 
 # ╔═╡ 7af3719c-bf0c-4502-a098-66f797f1b6ea
 let
-	model3 = solve(m3)
-	model3.u .-= 273.15
-	fig = Figure()
-	ax = Axis(fig[1, 1]; xlabel = "years", ylabel = "Temperature °C",
-	          title = "Earth's heat budget including outgoing radiation")
-	lines!(ax, model3; color = :red, linewidth = 3)
-	hlines!(ax, temp₀ - 273.15; color = :gray, linestyle = :dash)
-	text!(ax, 700, 35 + temp₀ - 273.15; text = "Initial Temperature = $(temp₀) K", align = (:center, :center))
-	ylims!(ax, -300, 400)
+	T_eq = ((1 - alpha) * a / b)^(1/4)
+	fig, ax = temperature_figure("Including outgoing thermal radiation"; ylims = (-300, 400))
+	temperature_line!(ax, solve(m3))
+	reference_line!(ax, temp₀; label = "initial: $(temp₀) K", color = palette.initial)
+	reference_line!(ax, T_eq; label = "equilibrium: $(celsius(T_eq)) °C",
+	                color = palette.equilibrium)
+	reference_line!(ax, K₀ + 15; label = "observed today ≈ 15 °C",
+	                color = palette.observed, linestyle = :dot)
+	side_legend!(fig, ax)
 	fig
 end
 
@@ -279,9 +315,10 @@ md"""
 \
 ``T' = (1-\alpha) a - (1-\epsilon/2)b T^4 ``$(html"<br>")
 
-Comment:  At long times, the temperatures reaches a stable value: 
-``T(t) = \left(\frac{(1-\alpha)a }{(1-\epsilon/2)b}\right)^{1/4}``
+At long times the temperature reaches a stable value:
+``T_{eq} = \left(\frac{(1-\alpha)a }{(1-\epsilon/2)b}\right)^{1/4}``
 
+Move the slider to change the atmosphere's emissivity ``\epsilon``.
 """
 
 # ╔═╡ de777b52-8ff7-4fc9-bdbc-17d64abf8926
@@ -299,15 +336,16 @@ m4 = ODEProblem( (temp, p, t)-> a * (1-alpha) - (1-epsilon/2)*b*temp^4, T₀,  (
 
 # ╔═╡ 2d3740ae-bbeb-49a5-a51e-0b5079e68592
 let
-	model4 = solve(m4)
-	model4.u .-= 273.15
-	fig = Figure()
-	ax = Axis(fig[1, 1]; xlabel = "years", ylabel = "Temperature °C",
-	          title = "Earth's temperature with an atmosphere")
-	lines!(ax, model4; color = :red, linewidth = 3)
-	hlines!(ax, T₀ - 273.15; color = :gray, linestyle = :dash)
-	text!(ax, 700, -7 + T₀ - 273.15; text = "Initial Temperature = $(T₀ - 273.15) C", align = (:center, :center))
-	ylims!(ax, -30, 35)
+	T_eq = ((1 - alpha) * a / ((1 - epsilon / 2) * b))^(1/4)
+	fig, ax = temperature_figure("With an atmosphere of emissivity ε = $(epsilon)";
+	                             ylims = (-30, 35))
+	temperature_line!(ax, solve(m4))
+	reference_line!(ax, T₀; label = "initial: $(celsius(T₀)) °C", color = palette.initial)
+	reference_line!(ax, T_eq; label = "equilibrium: $(celsius(T_eq)) °C",
+	                color = palette.equilibrium)
+	reference_line!(ax, K₀ + 15; label = "observed today ≈ 15 °C",
+	                color = palette.observed, linestyle = :dot)
+	side_legend!(fig, ax)
 	fig
 end
 
@@ -331,10 +369,29 @@ T₁=((1-alpha)*a/((1-ε₀/2)*b))^(1/4)
 # ╔═╡ 7a6019d9-41af-4e5c-80e6-25dc52ac1819
 emissivity(CO₂,T) = ε₀+0.02 * log(CO₂/280)/log(2)+0.01*(T-T₁)
 
+# ╔═╡ 6f1c2a8e-3b4d-4e5f-9a0b-1c2d3e4f5a63
+"""
+    equilibrium_temperature(CO₂; feedback = true)
+
+Equilibrium surface temperature [K] for an atmospheric CO₂ concentration [ppm],
+with or without the water-vapor feedback. It is the temperature at which the
+energy budget balances, ``T' = 0``, found by bisection.
+"""
+function equilibrium_temperature(CO₂; feedback = true)
+	imbalance(T) = (1 - alpha) * a - (1 - emissivity(CO₂, feedback ? T : T₁) / 2) * b * T^4
+	lo, hi = T₁ - 20, T₁ + 40
+	@assert imbalance(lo) > 0 > imbalance(hi)
+	for _ in 1:60
+		mid = (lo + hi) / 2
+		imbalance(mid) > 0 ? (lo = mid) : (hi = mid)
+	end
+	return (lo + hi) / 2
+end
+
 # ╔═╡ ce1792bc-36d2-49b2-bd92-351e09bb3a4f
 md"""
 
-CO₂ = $(@bind CO₂ Slider(280:1:560, show_value=true, default=280) )
+CO₂ (ppm) = $(@bind CO₂ Slider(280:10:1120, show_value=true, default=420) )
 
 """
 
@@ -343,15 +400,14 @@ m5 = ODEProblem( (temp, p, t)-> a * (1-alpha) - (1-emissivity(CO₂,T₁)/2)*b*t
 
 # ╔═╡ 819431a7-cdcd-430a-a89a-2db90eb22e7c
 let
-	model5 = solve(m5)
-	model5.u .-= 273.15
-	fig = Figure()
-	ax = Axis(fig[1, 1]; xlabel = "years", ylabel = "Temperature °C",
-	          title = "Earth's temperature dependence on CO₂")
-	lines!(ax, model5; color = :red, linewidth = 3)
-	hlines!(ax, T₁ - 273.15; color = :gray, linestyle = :dash)
-	text!(ax, 700, -0.5 + T₁ - 273.15; text = "Initial Temperature = $(round(10 * (T₁ - 273.15)) / 10) C", align = (:center, :center))
-	ylims!(ax, 12.4, 17)
+	T_eq = equilibrium_temperature(CO₂; feedback = false)
+	fig, ax = temperature_figure("CO₂ = $(CO₂) ppm"; ylims = (12.5, 16.5))
+	temperature_line!(ax, solve(m5))
+	reference_line!(ax, T₁; label = "initial (280 ppm): $(celsius(T₁)) °C",
+	                color = palette.initial)
+	reference_line!(ax, T_eq; label = "equilibrium: $(celsius(T_eq)) °C",
+	                color = palette.equilibrium)
+	side_legend!(fig, ax)
 	fig
 end
 
@@ -366,20 +422,253 @@ md"""
 
 """
 
+# ╔═╡ 6f1c2a8e-3b4d-4e5f-9a0b-1c2d3e4f5a65
+md"""
+Warmer air holds more water vapor, and water vapor is itself a greenhouse gas. We model this by letting the emissivity also increase with temperature,
+
+``\epsilon(CO_2, T) = \epsilon_0 + 0.02 \log_2(CO_2/280) + 0.01\,(T - T_1)``,
+
+so any warming caused by CO₂ raises ``\epsilon`` further, which causes more warming: a **positive feedback**. Move the slider and compare the two curves.
+"""
+
+# ╔═╡ 6f1c2a8e-3b4d-4e5f-9a0b-1c2d3e4f5a64
+md"""
+
+CO₂ (ppm) = $(@bind CO₂_wv Slider(280:10:1120, show_value=true, default=560))
+
+"""
+
 # ╔═╡ 0b6e8dd2-a060-4ed9-aa03-de48e3c7c3e1
-m6 = ODEProblem( (temp, p, t)-> a * (1-alpha) - (1-emissivity(CO₂,temp)/2)*b*temp^4, T₁,  (0, timespan) )
+m6 = ODEProblem( (temp, p, t)-> a * (1-alpha) - (1-emissivity(CO₂_wv,temp)/2)*b*temp^4, T₁,  (0, timespan) )
 
 # ╔═╡ 5b153580-78ee-4a73-b936-507b3b39f02c
 let
-	model6 = solve(m6)
-	model6.u .-= 273.15
-	fig = Figure()
-	ax = Axis(fig[1, 1]; xlabel = "years", ylabel = "Temperature °C",
-	          title = "Earth's temperature with water vapor feedback")
-	lines!(ax, model6; color = :red, linewidth = 3)
-	hlines!(ax, T₁ - 273.15; color = :gray, linestyle = :dash)
-	text!(ax, 700, -0.5 + T₁ - 273.15; text = "Initial Temperature = $(round(10 * (T₁ - 273.15)) / 10) C", align = (:center, :center))
-	ylims!(ax, 12.4, 17)
+	# same CO₂, emissivity frozen at T₁ (no water-vapor feedback) for comparison
+	m6_nofeedback = ODEProblem((temp, p, t) -> a * (1 - alpha) -
+	                           (1 - emissivity(CO₂_wv, T₁) / 2) * b * temp^4, T₁, (0, timespan))
+	T_fb   = equilibrium_temperature(CO₂_wv; feedback = true)
+	T_nofb = equilibrium_temperature(CO₂_wv; feedback = false)
+
+	fig = Figure(size = (1000, 400))
+	ax = Axis(fig[1, 1]; title = "CO₂ = $(CO₂_wv) ppm", xlabel = "time  [years]",
+	          ylabel = "surface temperature  [°C]")
+	temperature_line!(ax, solve(m6); label = "with water-vapor feedback")
+	temperature_line!(ax, solve(m6_nofeedback); label = "without feedback",
+	                  color = palette.nofeedback, linestyle = :dash)
+	reference_line!(ax, T₁; label = "initial (280 ppm): $(celsius(T₁)) °C",
+	                color = palette.initial, linestyle = :dot)
+	ylims!(ax, 12.5, 19.5)
+	axislegend(ax; position = :lt)
+
+	# equilibrium warming as a function of CO₂
+	CO₂s = 280:10:1120
+	ΔT_fb   = [equilibrium_temperature(c; feedback = true)  - T₁ for c in CO₂s]
+	ΔT_nofb = [equilibrium_temperature(c; feedback = false) - T₁ for c in CO₂s]
+	ax2 = Axis(fig[1, 2]; title = "Equilibrium warming", xlabel = "CO₂  [ppm]",
+	           ylabel = "ΔT  [K]", xticks = 280:140:1120)
+	lines!(ax2, CO₂s, ΔT_fb; color = palette.model, label = "with water-vapor feedback")
+	lines!(ax2, CO₂s, ΔT_nofb; color = palette.nofeedback, linestyle = :dash,
+	       label = "without feedback")
+	vlines!(ax2, CO₂_wv; color = (:black, 0.25), linewidth = 1)
+	scatter!(ax2, [CO₂_wv, CO₂_wv], [T_fb - T₁, T_nofb - T₁];
+	         color = [palette.model, palette.nofeedback], markersize = 12,
+	         strokecolor = :white, strokewidth = 1.5)
+	ylims!(ax2, -0.2, 6.5)
+	axislegend(ax2; position = :lt)
+	if CO₂_wv > 280
+		gain = (T_fb - T₁) / (T_nofb - T₁)
+		text!(ax2, CO₂_wv, T_fb - T₁; text = "  +$(round(T_fb - T₁; digits = 2)) K\n  (×$(round(gain; digits = 1)) amplification)",
+		      align = (CO₂_wv > 900 ? :right : :left, :top), fontsize = 13,
+		      offset = (CO₂_wv > 900 ? -8 : 0, -6))
+	end
+	colgap!(fig.layout, 30)
+	fig
+end
+
+# ╔═╡ 6f1c2a8e-3b4d-4e5f-9a0b-1c2d3e4f5a66
+# Antarctic ice-core records, averaged in 1000-year bins (age 0.5, 1.5, …, 799.5 kyr BP;
+# empty bins linearly interpolated). Sources (NOAA NCEI Paleoclimatology):
+#   temperature anomaly relative to the last millennium, EPICA Dome C: Jouzel et al. (2007), Science 317, 793
+#   https://www.ncei.noaa.gov/pub/data/paleo/icecore/antarctica/epica_domec/edc3deuttemp2007.txt
+#   CO₂ composite (pre-industrial samples, age ≥ 200 yr BP): Bereiter et al. (2015), GRL 42, 542
+#   https://www.ncei.noaa.gov/pub/data/paleo/icecore/antarctica/antarctica2015co2composite.txt
+icecore = (
+	age_kyr = 0.5:1.0:799.5,
+	temperature = [
+		-0.15, -0.03, -0.15, -0.10, -0.05, -0.24, -0.56, -0.95, -1.23, -0.42, -0.30, -0.84,
+		-3.95, -4.22, -3.74, -5.45, -7.25, -9.05, -9.39, -9.42, -9.43, -9.27, -9.44, -9.17,
+		-9.63, -9.79, -9.72, -8.89, -8.94, -8.58, -8.92, -9.01, -8.69, -8.40, -8.36, -7.97,
+		-8.21, -6.82, -6.71, -8.06, -8.26, -8.05, -7.90, -7.54, -8.09, -6.33, -5.81, -6.78,
+		-7.50, -7.51, -7.01, -6.67, -6.24, -5.79, -6.68, -7.18, -6.89, -6.15, -5.53, -6.10,
+		-6.91, -7.52, -8.51, -8.35, -8.75, -9.03, -9.06, -8.82, -8.66, -8.25, -6.35, -6.62,
+		-7.75, -6.29, -5.06, -6.66, -6.65, -6.38, -5.84, -5.35, -4.91, -4.51, -3.57, -3.20,
+		-4.06, -4.72, -5.55, -6.59, -5.95, -5.37, -5.60, -5.65, -5.21, -4.82, -4.38, -4.78,
+		-4.68, -4.59, -4.62, -4.87, -4.45, -4.27, -5.06, -6.38, -5.36, -4.87, -4.16, -5.49,
+		-6.79, -5.87, -5.21, -5.14, -4.63, -3.73, -2.62, -1.99, -1.31, -0.41, 0.23, 0.71, 1.26,
+		1.68, 1.92, 2.03, 2.07, 1.38, 1.69, 2.88, 3.88, 3.32, 1.61, -0.56, -2.75, -4.15, -5.78,
+		-7.48, -8.30, -8.06, -8.65, -8.86, -8.76, -8.56, -8.46, -8.60, -8.23, -8.61, -7.91,
+		-8.31, -7.89, -7.64, -7.31, -7.60, -7.65, -8.16, -8.71, -8.69, -9.29, -8.79, -8.19,
+		-7.08, -7.77, -7.68, -6.80, -7.87, -8.76, -8.50, -8.29, -7.32, -6.82, -7.15, -8.18,
+		-7.16, -7.02, -8.07, -7.94, -8.35, -8.06, -6.30, -6.64, -8.32, -8.38, -8.73, -8.69,
+		-8.85, -8.67, -8.11, -7.24, -5.15, -5.76, -6.57, -7.27, -6.57, -5.60, -6.61, -6.22,
+		-5.02, -4.40, -3.21, -2.48, -2.18, -2.25, -2.47, -3.99, -4.59, -4.04, -3.31, -3.01,
+		-2.79, -2.26, -1.88, -1.56, -1.86, -2.18, -2.12, -2.08, -1.79, -3.15, -4.29, -5.27,
+		-5.61, -6.49, -7.54, -8.13, -8.46, -8.14, -6.96, -5.74, -7.14, -8.15, -6.45, -7.23,
+		-6.77, -5.94, -5.28, -4.57, -3.54, -2.62, -2.53, -2.17, -1.87, -0.87, 1.14, 2.09, 0.62,
+		-2.21, -4.01, -6.29, -6.26, -6.00, -6.87, -7.65, -7.76, -8.13, -8.00, -7.68, -8.07,
+		-7.44, -7.28, -6.79, -7.57, -7.82, -7.66, -7.54, -6.50, -7.05, -7.50, -7.90, -8.57,
+		-8.51, -8.82, -8.95, -9.24, -9.25, -9.13, -8.85, -8.54, -8.61, -8.28, -8.38, -8.01,
+		-6.53, -7.21, -6.48, -5.93, -5.76, -5.71, -5.20, -5.07, -4.91, -4.76, -4.32, -5.62,
+		-6.34, -7.35, -7.41, -6.98, -5.96, -7.52, -7.17, -6.42, -5.72, -7.11, -6.34, -5.38,
+		-5.16, -4.57, -5.65, -6.86, -5.86, -5.73, -5.51, -5.26, -4.48, -3.68, -3.15, -2.88,
+		-2.44, -3.46, -4.62, -4.33, -3.51, -2.52, -1.63, -0.92, -0.19, 0.41, 0.46, 0.69, 1.00,
+		0.50, 0.63, 0.34, 2.47, 3.36, 2.45, 0.19, -2.22, -3.32, -4.99, -6.42, -7.73, -9.24,
+		-9.29, -8.83, -8.77, -8.48, -8.45, -8.02, -7.97, -7.40, -7.72, -7.83, -7.82, -7.62,
+		-8.51, -8.91, -8.62, -8.88, -8.58, -8.38, -8.09, -7.89, -7.65, -6.98, -7.93, -7.39,
+		-7.60, -7.20, -7.92, -7.18, -6.76, -6.45, -5.55, -6.18, -7.53, -7.46, -6.90, -6.46,
+		-6.38, -5.67, -5.04, -4.42, -4.97, -5.75, -5.39, -4.62, -3.54, -4.88, -5.74, -6.33,
+		-5.34, -4.76, -3.99, -3.01, -2.28, -1.44, -0.88, -0.18, -0.18, 0.36, 1.09, 1.52, 1.90,
+		2.19, 1.96, 2.34, 2.37, 2.53, 1.97, 1.86, 1.59, 1.17, 0.42, 0.49, 0.20, 0.34, 0.43, 0.54,
+		-0.13, -0.32, -0.45, -1.32, -1.64, -2.31, -0.48, -1.26, -2.36, -3.86, -5.50, -6.70,
+		-7.84, -8.19, -8.29, -8.35, -8.17, -8.26, -9.27, -9.43, -8.80, -9.17, -9.05, -8.53,
+		-8.42, -7.53, -7.61, -7.55, -7.48, -6.24, -7.07, -7.27, -7.79, -6.70, -7.48, -6.79,
+		-6.91, -7.39, -8.57, -8.70, -8.82, -8.47, -8.34, -7.85, -7.39, -7.65, -8.26, -8.50,
+		-8.17, -8.34, -7.58, -6.87, -5.74, -4.42, -5.06, -6.59, -6.89, -5.42, -4.40, -4.29,
+		-5.59, -5.44, -4.86, -4.74, -4.15, -3.75, -3.45, -3.42, -2.99, -2.57, -2.15, -2.32,
+		-2.62, -3.18, -3.42, -3.55, -3.76, -3.72, -3.83, -3.82, -3.84, -4.01, -4.32, -4.63,
+		-4.35, -4.35, -4.20, -5.19, -4.80, -4.57, -5.61, -5.76, -5.66, -5.85, -5.55, -5.26,
+		-4.94, -4.27, -4.27, -3.66, -3.50, -3.37, -3.44, -3.55, -4.32, -4.46, -4.55, -4.64,
+		-4.70, -4.74, -4.30, -5.04, -6.41, -7.22, -7.60, -7.47, -6.92, -6.99, -6.79, -6.62,
+		-7.65, -7.51, -7.55, -7.36, -7.17, -7.35, -7.88, -8.13, -7.91, -7.00, -7.19, -6.47,
+		-5.46, -6.38, -6.62, -5.57, -4.41, -3.23, -4.43, -5.22, -6.22, -6.33, -5.28, -4.46,
+		-3.69, -3.06, -2.33, -2.00, -1.80, -1.59, -1.56, -1.42, -1.50, -1.49, -1.59, -1.60,
+		-1.39, -1.31, -1.87, -1.98, -1.27, -1.10, -2.41, -3.93, -5.61, -6.96, -5.83, -5.79,
+		-6.52, -6.42, -4.90, -3.76, -4.23, -5.80, -5.30, -4.86, -4.11, -4.93, -6.31, -6.56,
+		-5.54, -5.35, -5.08, -4.23, -4.26, -4.22, -3.71, -3.47, -3.08, -2.35, -1.88, -1.23,
+		-1.36, -1.43, -1.25, -1.20, -1.30, -1.12, -1.70, -2.28, -2.04, -2.38, -1.96, -2.59,
+		-2.52, -2.73, -2.69, -2.20, -3.80, -5.54, -7.17, -8.37, -8.72, -8.80, -8.52, -8.24,
+		-8.90, -8.92, -8.66, -8.39, -8.68, -8.84, -8.85, -8.86, -8.21, -7.73, -7.71, -7.68,
+		-7.71, -7.82, -7.46, -7.07, -7.47, -7.29, -7.72, -7.92, -7.58, -6.87, -6.71, -7.38,
+		-7.52, -8.19, -8.64, -8.30, -8.00, -7.82, -8.42, -9.00, -9.03, -8.95, -8.89, -7.78,
+		-7.28, -7.89, -8.12, -7.68, -7.28, -6.24, -6.30, -7.12, -5.16, -5.55, -6.94, -6.48,
+		-5.39, -5.40, -5.03, -4.64, -4.15, -3.62, -3.43, -3.40, -2.90, -2.65, -2.31, -1.67,
+		-1.97, -1.90, -1.89, -1.84, -2.01, -2.52, -2.50, -1.98, -2.45, -2.53, -3.13, -3.33,
+		-3.73, -3.62, -3.50, -3.95, -4.03, -4.05, -4.24, -3.90, -4.12, -5.20, -5.42, -6.23,
+		-6.47, -6.92, -7.52, -8.77, -8.32, -7.14, -5.46, -5.07, -6.10, -6.00, -5.83, -5.69,
+		-5.27, -5.06, -4.20, -3.86, -4.05, -3.86, -4.25, -4.64, -5.50, -6.71, -8.16, -8.25,
+		-8.54, -8.89, -8.67, -8.48, -8.59, -8.63, -8.64, -8.38, -8.54, -8.50, -8.37, -8.11,
+		-7.67, -7.22, -5.88, -5.20, -5.92, -6.78, -7.27, -7.03, -5.78, -4.94, -4.76, -5.33,
+		-6.31, -6.00, -5.33, -4.19, -3.80, -4.12, -4.52, -3.97, -3.47, -2.96, -2.70, -2.67,
+		-2.25, -2.13, -2.27, -2.28, -1.94, -1.70, -1.43, -1.05, -0.83, -1.15, -2.37, -2.84,
+		-3.98, -5.05, -5.61, -6.21, -7.33, -8.23, -8.53, -8.73, -8.54, -8.88
+	],
+	co2 = [
+		280.0, 278.5, 276.5, 274.1, 270.9, 266.3, 261.8, 260.2, 260.1, 262.8, 265.7, 261.0,
+		245.9, 238.9, 234.7, 226.2, 215.1, 192.5, 188.7, 192.0, 191.3, 188.3, 187.7, 189.8,
+		184.0, 183.3, 185.5, 190.3, 192.0, 190.8, 186.7, 190.9, 195.3, 196.5, 198.4, 201.9,
+		202.6, 210.3, 207.5, 201.3, 197.7, 202.4, 204.1, 202.8, 207.4, 215.3, 216.8, 206.3,
+		202.9, 202.7, 206.2, 211.4, 218.7, 222.7, 217.4, 212.5, 210.1, 218.9, 223.8, 227.0,
+		215.1, 208.9, 201.8, 197.3, 201.7, 201.7, 205.8, 202.4, 201.8, 208.3, 220.3, 236.3,
+		234.9, 231.8, 236.3, 247.6, 238.7, 228.3, 226.0, 232.0, 232.3, 232.2, 242.0, 248.9,
+		240.8, 231.7, 223.4, 222.3, 220.9, 228.1, 230.7, 232.4, 232.5, 236.7, 242.4, 244.6,
+		245.8, 241.1, 243.2, 243.0, 246.8, 242.4, 237.1, 240.7, 243.0, 253.2, 242.2, 239.3,
+		236.4, 244.3, 246.7, 257.9, 260.0, 262.7, 271.5, 275.1, 273.6, 274.5, 277.7, 271.2,
+		272.8, 278.0, 278.6, 276.5, 278.5, 276.8, 274.4, 276.3, 278.4, 264.5, 251.3, 236.7,
+		226.3, 222.7, 212.4, 208.1, 203.7, 199.2, 198.6, 192.8, 194.0, 195.3, 196.5, 194.6,
+		196.0, 194.8, 193.6, 194.7, 195.8, 201.8, 202.5, 202.3, 200.6, 198.8, 196.3, 192.8,
+		189.4, 189.2, 189.0, 185.5, 187.5, 193.1, 198.7, 204.3, 196.5, 193.7, 190.8, 186.7,
+		183.8, 196.6, 197.2, 197.8, 197.8, 197.7, 197.7, 196.0, 190.3, 189.8, 198.7, 207.7,
+		210.4, 213.2, 217.7, 198.1, 199.7, 201.6, 203.4, 207.1, 210.7, 231.3, 228.6, 225.9,
+		221.9, 218.0, 220.6, 223.2, 224.8, 226.4, 241.9, 244.9, 247.9, 250.9, 239.1, 247.6,
+		241.9, 236.2, 227.4, 230.4, 235.1, 242.4, 245.6, 249.4, 248.4, 243.4, 251.2, 240.9,
+		245.1, 251.4, 245.3, 240.5, 214.1, 216.1, 207.1, 208.8, 205.6, 207.6, 209.5, 235.5,
+		233.8, 224.5, 228.4, 232.4, 237.8, 240.2, 242.7, 245.2, 246.8, 245.2, 239.1, 246.3,
+		252.8, 261.4, 279.0, 280.2, 258.0, 243.3, 224.9, 221.5, 218.1, 214.7, 207.4, 200.2,
+		204.7, 196.7, 195.4, 197.2, 199.0, 202.9, 203.4, 203.9, 209.6, 205.7, 211.8, 219.9,
+		228.1, 214.0, 199.9, 211.7, 187.9, 194.2, 196.5, 198.8, 184.7, 190.4, 193.9, 194.1,
+		198.4, 193.2, 202.2, 204.5, 211.0, 215.3, 223.7, 227.5, 231.3, 228.0, 226.4, 230.9,
+		231.0, 229.3, 227.7, 217.1, 207.6, 206.0, 206.7, 212.7, 213.1, 215.1, 217.1, 224.4,
+		231.0, 236.1, 239.0, 236.0, 240.2, 245.4, 248.6, 244.8, 225.8, 227.8, 229.7, 237.8,
+		239.0, 241.9, 254.1, 257.1, 246.8, 262.1, 245.2, 233.4, 255.8, 249.2, 253.2, 257.2,
+		260.4, 260.4, 266.2, 264.0, 268.1, 271.9, 275.1, 265.0, 272.1, 277.8, 288.8, 288.4,
+		282.2, 270.5, 248.8, 239.6, 234.2, 242.1, 250.1, 200.7, 202.9, 205.2, 204.8, 211.9,
+		216.1, 220.3, 220.7, 221.1, 218.6, 216.2, 209.4, 209.2, 205.1, 201.1, 197.1, 193.0,
+		186.1, 185.9, 185.8, 190.9, 196.1, 201.2, 202.9, 204.6, 206.3, 204.8, 203.4, 201.9,
+		200.9, 199.9, 207.3, 214.7, 219.6, 224.6, 229.6, 228.9, 228.3, 227.7, 227.0, 233.5,
+		240.0, 239.6, 239.1, 246.8, 246.3, 245.8, 250.1, 254.5, 258.8, 263.0, 267.1, 269.4,
+		271.7, 274.0, 276.3, 277.1, 283.2, 281.3, 279.4, 277.9, 276.5, 280.5, 279.6, 285.6,
+		284.5, 274.7, 282.6, 283.5, 279.2, 274.9, 264.9, 274.0, 271.7, 272.6, 274.6, 273.7,
+		272.5, 268.6, 266.4, 270.6, 267.7, 269.6, 267.7, 253.7, 248.2, 242.5, 231.1, 219.7,
+		227.2, 211.5, 207.6, 209.8, 208.7, 207.5, 203.9, 200.3, 201.7, 201.5, 201.3, 202.0,
+		200.6, 199.1, 200.1, 201.1, 203.5, 208.1, 201.7, 201.2, 204.9, 201.9, 198.4, 195.9,
+		193.3, 195.8, 203.8, 208.3, 202.4, 195.5, 190.7, 194.4, 199.9, 207.6, 208.1, 204.4,
+		203.4, 204.7, 206.0, 217.1, 230.9, 243.8, 243.4, 233.1, 232.8, 236.6, 239.1, 233.9,
+		219.8, 223.8, 223.4, 227.3, 231.4, 231.2, 233.0, 232.1, 237.1, 241.4, 248.2, 243.3,
+		245.2, 239.7, 239.1, 238.4, 237.6, 236.4, 232.8, 230.6, 230.8, 229.5, 231.2, 232.0,
+		233.1, 233.9, 235.5, 236.0, 237.6, 240.3, 233.4, 236.4, 235.2, 242.0, 238.7, 241.5,
+		243.0, 246.7, 245.5, 245.3, 246.6, 243.5, 242.7, 241.9, 236.8, 235.8, 232.0, 227.8,
+		224.7, 222.7, 221.2, 220.3, 215.5, 202.2, 195.1, 192.2, 199.8, 199.4, 205.0, 206.4,
+		212.9, 211.2, 205.0, 203.6, 208.1, 210.3, 209.6, 209.7, 204.6, 202.5, 211.2, 215.2,
+		220.8, 222.8, 223.6, 225.5, 237.4, 246.7, 241.4, 231.5, 229.3, 231.8, 234.3, 242.7,
+		246.7, 252.1, 253.1, 253.9, 253.2, 250.8, 251.0, 251.0, 248.3, 248.5, 251.8, 250.5,
+		252.7, 251.3, 250.1, 252.2, 241.4, 225.0, 212.7, 208.7, 213.8, 218.9, 224.0, 230.2,
+		242.6, 250.2, 245.8, 237.4, 227.5, 233.2, 238.1, 232.9, 218.8, 216.3, 219.0, 227.7,
+		230.1, 232.4, 237.9, 239.1, 241.8, 244.5, 248.5, 254.6, 256.9, 259.2, 257.7, 258.8,
+		258.1, 256.2, 254.5, 252.8, 252.8, 252.6, 248.3, 247.1, 245.9, 243.5, 243.9, 239.2,
+		237.9, 235.0, 222.1, 205.8, 203.8, 201.9, 201.2, 200.5, 196.5, 195.5, 194.5, 194.9,
+		194.0, 195.3, 192.1, 188.8, 190.2, 190.8, 191.5, 193.4, 195.3, 195.8, 189.9, 191.8,
+		193.5, 196.2, 191.3, 189.2, 187.0, 192.9, 194.8, 200.0, 200.3, 191.0, 184.1, 186.5,
+		188.4, 192.8, 191.5, 191.0, 190.2, 180.4, 174.8, 173.7, 179.2, 187.7, 191.5, 195.9,
+		196.0, 201.1, 204.7, 213.9, 222.6, 218.3, 219.2, 230.9, 233.4, 226.9, 220.2, 221.5,
+		225.0, 221.2, 221.6, 222.8, 227.3, 231.7, 236.1, 239.0, 241.4, 240.0, 239.7, 238.4,
+		238.1, 239.2, 241.3, 239.2, 236.8, 232.9, 232.2, 232.1, 233.2, 235.4, 236.6, 236.2,
+		233.8, 231.0, 226.0, 225.4, 224.1, 223.9, 227.4, 225.4, 212.1, 194.2, 193.5, 200.8,
+		214.5, 219.1, 214.1, 212.6, 212.2, 211.5, 211.3, 210.1, 210.7, 210.0, 211.2, 211.2,
+		210.9, 207.7, 213.4, 216.3, 215.2, 205.7, 191.7, 185.6, 184.4, 187.0, 188.7, 187.8,
+		189.0, 187.3, 190.2, 187.9, 187.5, 189.4, 192.1, 192.4, 197.5, 199.7, 200.4, 201.2,
+		208.8, 213.6, 218.3, 224.2, 224.6, 216.6, 214.7, 217.0, 223.9, 228.7, 231.4, 224.9,
+		223.8, 223.8, 230.6, 233.4, 243.5, 241.9, 238.8, 241.7, 247.1, 247.3, 252.5, 254.8,
+		253.5, 254.4, 257.4, 255.0, 260.9, 257.8, 263.3, 267.7, 257.1, 237.1, 227.4, 230.6,
+		219.6, 215.9, 211.3, 206.7, 198.8, 197.9, 200.5, 200.5
+	],
+)
+
+# ╔═╡ 041caa91-5449-4de1-8786-56ae3db74bfe
+let
+	t = -collect(icecore.age_kyr)              # thousands of years, negative = past
+	T, CO₂ = icecore.temperature, icecore.co2
+
+	# correlation, and the linear fit CO₂ ≈ c₀ + c₁ T used to align the two axes
+	μ(x) = sum(x) / length(x)
+	T′, C′ = T .- μ(T), CO₂ .- μ(CO₂)
+	r  = sum(T′ .* C′) / sqrt(sum(abs2, T′) * sum(abs2, C′))
+	c₁ = sum(T′ .* C′) / sum(abs2, T′)
+	c₀ = μ(CO₂) - c₁ * μ(T)
+	Tlims = (-12.0, 5.0)
+
+	fig = Figure(size = (840, 420))
+	axT = Axis(fig[1, 1];
+		title = "Antarctic temperature and CO₂ over 800,000 years   (correlation r = $(round(r; digits = 2)))",
+		xlabel = "thousands of years before present",
+		ylabel = "temperature anomaly  [°C]",
+		ylabelcolor = palette.model, yticklabelcolor = palette.model,
+		xticks = (-800:100:0, string.(800:-100:0)))
+	axC = Axis(fig[1, 1]; yaxisposition = :right, ylabel = "CO₂  [ppm]",
+		ylabelcolor = palette.nofeedback, yticklabelcolor = palette.nofeedback,
+		rightspinevisible = true, leftspinevisible = false, bottomspinevisible = false,
+		xgridvisible = false, ygridvisible = false)
+	hidexdecorations!(axC)
+
+	lT = lines!(axT, t, T; color = palette.model, linewidth = 1.8)
+	lC = lines!(axC, t, CO₂; color = (palette.nofeedback, 0.9), linewidth = 1.8)
+
+	ylims!(axT, Tlims...)
+	ylims!(axC, (c₀ .+ c₁ .* Tlims)...)       # same mapping: curves overlay
+	linkxaxes!(axT, axC)
+	xlims!(axT, -805, 5)
+	Legend(fig[2, 1], [lT, lC], ["Antarctic temperature anomaly (EPICA Dome C)",
+	       "atmospheric CO₂ (ice-core composite)"]; orientation = :horizontal)
+	rowgap!(fig.layout, 6)
 	fig
 end
 
@@ -400,7 +689,7 @@ PlutoUI = "~0.7.84"
 PLUTO_MANIFEST_TOML_CONTENTS = """
 # This file is machine-generated - editing it directly is not advised
 
-julia_version = "1.13.3"
+julia_version = "1.13.0"
 manifest_format = "2.1"
 project_hash = "72cd365b469c3151f316583804b1c02269c74064"
 
@@ -1724,7 +2013,7 @@ version = "1.0.0"
 [[deps.LibCURL_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "LibSSH2_jll", "Libdl", "OpenSSL_jll", "Zlib_jll", "Zstd_jll", "nghttp2_jll"]
 uuid = "deac9b47-8bc7-5906-a0fe-35ac56dc84c0"
-version = "8.22.0+0"
+version = "8.18.0+1"
 
 [[deps.LibGit2]]
 deps = ["LibGit2_jll", "NetworkOptions", "Printf", "SHA"]
@@ -1734,12 +2023,12 @@ version = "1.11.0"
 [[deps.LibGit2_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "LibSSH2_jll", "Libdl", "OpenSSL_jll", "PCRE2_jll", "Zlib_jll"]
 uuid = "e37daf67-58a4-590a-8e99-b0245dd2ffc5"
-version = "1.9.7+0"
+version = "1.9.1+0"
 
 [[deps.LibSSH2_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "Libdl", "OpenSSL_jll", "Zlib_jll"]
 uuid = "29816b5a-b9ab-546f-933c-edad1886dfa8"
-version = "1.11.104+0"
+version = "1.11.103+0"
 
 [[deps.Libdl]]
 uuid = "8f399da3-3557-5675-b5ff-fb832c97cbdb"
@@ -2016,7 +2305,7 @@ version = "0.3.4"
 
 [[deps.MozillaCACerts_jll]]
 uuid = "14a3606d-f60d-562e-9121-12d972cd8159"
-version = "2026.10.20"
+version = "2026.8.13"
 
 [[deps.MuladdMacro]]
 deps = ["PrecompileTools"]
@@ -2203,7 +2492,7 @@ version = "0.8.7+0"
 [[deps.OpenSSL_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "458c3c95-2e84-50aa-8efc-19380b2a3a95"
-version = "3.5.8+0"
+version = "3.5.6+0"
 
 [[deps.OpenSpecFun_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "JLLWrappers", "Libdl"]
@@ -2318,7 +2607,7 @@ version = "2.4.2"
 [[deps.PCRE2_jll]]
 deps = ["Artifacts", "Libdl"]
 uuid = "efcefdf7-47ab-520b-bdef-62a2eaa19f15"
-version = "10.47.0+0"
+version = "10.46.0+0"
 
 [[deps.PDMats]]
 deps = ["LinearAlgebra", "SparseArrays", "SuiteSparse"]
@@ -3287,7 +3576,7 @@ version = "1.6.0+0"
 [[deps.Zlib_jll]]
 deps = ["Libdl"]
 uuid = "83775a58-1f1d-513f-b197-d71354ab007a"
-version = "1.3.2+0"
+version = "1.3.1+2"
 
 [[deps.Zstd_jll]]
 deps = ["CompilerSupportLibraries_jll", "Libdl"]
@@ -3379,7 +3668,7 @@ version = "1.6.1+0"
 [[deps.nghttp2_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "Libdl"]
 uuid = "8e850ede-7688-5339-a07c-302acd2aaf8d"
-version = "1.70.0+0"
+version = "1.67.1+0"
 
 [[deps.oneTBB_jll]]
 deps = ["Artifacts", "JLLWrappers", "LazyArtifacts", "Libdl"]
@@ -3391,7 +3680,7 @@ version = "2023.1.0+0"
 [[deps.p7zip_jll]]
 deps = ["Artifacts", "CompilerSupportLibraries_jll", "Libdl"]
 uuid = "3f19e933-33d8-53b3-aaab-bd5110c3b7a0"
-version = "17.8.3+0"
+version = "17.8.2+0"
 
 [[deps.x264_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl"]
@@ -3415,11 +3704,13 @@ uuid = "23338594-aafe-5451-b93e-139f81909106"
 # ╔═╡ Cell order:
 # ╟─42085492-ac8c-11eb-0620-adcb307077f1
 # ╟─3e60b013-98cf-4057-9c96-b627662c85a4
+# ╟─6f1c2a8e-3b4d-4e5f-9a0b-1c2d3e4f5a61
+# ╟─6f1c2a8e-3b4d-4e5f-9a0b-1c2d3e4f5a62
 # ╟─14195fc4-40e1-4576-973a-69d649fddc02
 # ╟─92883ed9-5572-41fd-96c7-190279f90804
-# ╟─2ab34e6f-9059-4f33-8abd-df15b0c00b6b
-# ╟─8d2fd4f0-f2f6-4bc8-b753-f34f2abfcc7e
+# ╠═2ab34e6f-9059-4f33-8abd-df15b0c00b6b
 # ╟─041caa91-5449-4de1-8786-56ae3db74bfe
+# ╟─6f1c2a8e-3b4d-4e5f-9a0b-1c2d3e4f5a67
 # ╟─21b71237-bfdf-47d1-beb3-eac924c52f6a
 # ╟─b6c511c8-918d-432c-9756-9641176ff652
 # ╟─e8a5cf48-f647-4fb3-8c0a-4eae97d03e02
@@ -3453,11 +3744,15 @@ uuid = "23338594-aafe-5451-b93e-139f81909106"
 # ╠═86a2382e-0276-4787-9169-1f85f2ca1ef7
 # ╠═87a384f1-1679-4f1a-aaad-ac85c117b959
 # ╠═7a6019d9-41af-4e5c-80e6-25dc52ac1819
+# ╠═6f1c2a8e-3b4d-4e5f-9a0b-1c2d3e4f5a63
 # ╠═a61b1671-ad76-4a34-8d63-3f687fffe836
 # ╟─ce1792bc-36d2-49b2-bd92-351e09bb3a4f
 # ╟─819431a7-cdcd-430a-a89a-2db90eb22e7c
 # ╟─ee9724f1-5414-4c3d-85b9-e394afea2e72
+# ╟─6f1c2a8e-3b4d-4e5f-9a0b-1c2d3e4f5a65
+# ╟─6f1c2a8e-3b4d-4e5f-9a0b-1c2d3e4f5a64
 # ╠═0b6e8dd2-a060-4ed9-aa03-de48e3c7c3e1
 # ╟─5b153580-78ee-4a73-b936-507b3b39f02c
+# ╟─6f1c2a8e-3b4d-4e5f-9a0b-1c2d3e4f5a66
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002
